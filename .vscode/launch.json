@@ -1,0 +1,26 @@
+{
+    "configurations": [
+        {
+            "type": "aws-sam",
+            "request": "direct-invoke",
+            "name": "phd-motivational-sms:SendSMSFunction",
+            "invokeTarget": {
+                "target": "code",
+                "projectRoot": "${workspaceFolder}/phd_sms",
+                "lambdaHandler": "app.lambda_handler"
+            },
+            "lambda": {
+                "runtime": "python3.9",
+                "payload": {
+                    "json": {
+                        "test": "true"
+                    }
+                },
+                "environmentVariables": {
+                    "SECRET_BUCKET": "phd-sms-stack-s3bucket-fe8puem9qioa",
+                    "SECRET_KEY": "secrets.json"
+                }
+            }
+        }
+    ]
+}

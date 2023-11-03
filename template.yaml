@@ -1,0 +1,92 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  AWS Lambda application to send SMS messages to my PhD friend writing his thesis.
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Runtime: python3.9
+    Handler: app.lambda_handler
+    Timeout: 600
+    MemorySize: 128
+    Architectures:
+        - x86_64
+    Environment:
+      Variables:
+        SECRET_BUCKET: !Ref S3Bucket # Name of automatically deployed S3 bucket containing secrets.
+        SECRET_KEY: "secrets.json" # File containing API keys and other secrets.
+
+Parameters:
+  SNSEmailParameter:
+    Type: String
+    Description: Enter email address for execution failure SNS topic subscription.
+
+Resources:
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AccessControl: Private
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  SendSMSFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: phd_sms
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Ref S3Bucket
+      Events:
+        SMSSchedule:
+          Type: ScheduleV2
+          Properties:
+            ScheduleExpression: cron(30 9 ? * MON-FRI *) # Everyday at 09:30 on weekdays
+            Description: Automatically send out SMS on scheduled basis.
+            EndDate: "2023-12-15T14:00:00.000Z"
+            Input: '{"test": "false"}'
+      EventInvokeConfig:
+        MaximumRetryAttempts: 0
+
+  SMSTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Subscription:
+      - Endpoint: !Ref SNSEmailParameter
+        Protocol: email
+
+  ExecutionFailureAlarm:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      ActionsEnabled: true
+      AlarmDescription: 'Sends an alarm when the send SMS for PhD motivation function fails.'
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref SendSMSFunction
+      EvaluationPeriods: 1
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 21600
+      Threshold: 1
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref SMSTopic
+
+Outputs:
+  SendSMSFunction:
+    Description: "Send SMS Function ARN"
+    Value: !GetAtt SendSMSFunction.Arn
+  SMSTopic:
+    Description: "SMS SNS Topic ARN"
+    Value: !Ref SMSTopic
